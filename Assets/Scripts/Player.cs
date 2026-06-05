@@ -2,25 +2,35 @@ using UnityEngine;
 
 public class Player : MonoBehaviour
 {
-    public LineRenderer lineRenderer;
-    public float maxDistance = 100f;
+    [Header("Settings")]
+    public float mouseSensitivity;
+    public float smoothSpeed;
 
+    [Header("Walking")]
+    public Vector3 walkingCameraOffset; // third person
+    public float walkSpeed;
+    public float maxWalkingSpeed;
+    public float maxSlopeAngle;
+    RaycastHit groundHit;
+
+    [Header("Flying")]
+    public float initialUpForce; // when turn from walking to flying, up force
+    public Vector3 flyingCameraOffset; // first person? (0, 0, 0)
+    public float flySpeed;
+    public float bounceForce; // once on ground when flying, must bounce back a little to land
+
+    [Header("Laser")]
+    public LineRenderer laser;
+    public float maxDistanceOfLaser = 100f;
+    public Vector3 laserOffset; // play around with this
+    
     Rigidbody rb;
 
     public bool isFlying = false;
 
-    public float moveSpeed;
-
-    public float maxSlopeAngle;
-    RaycastHit slopeHit;
-
     float playerHeight;
 
-    public float maxSpeed;
-
-    public GameObject camera;
-
-    public Vector3 offsetLaser;
+    public Transform cameraT;
 
     void Start()
     {
@@ -30,56 +40,107 @@ public class Player : MonoBehaviour
         playerHeight = capsule.height * transform.localScale.y;
     }
 
+    float pitch;
+
     void Update()
     {
-        OnSlope();
-
-        // 1. Get mouse inputs
         float mouseX = Input.GetAxis("Mouse X");
         float mouseY = Input.GetAxis("Mouse Y");
 
-        // 2. Rotate the player body left/right (Updates transform.forward correctly)
-        transform.Rotate(Vector3.up * mouseX);
+        if (Input.GetKeyDown(KeyCode.Space) && !isFlying)
+        {
+            isFlying = true;
+            rb.AddForce(Vector3.up * initialUpForce, ForceMode.Impulse);
+        }
 
-        // 3. Rotate only the camera up/down (Does not mess up player movement)
-        camera.transform.Rotate(Vector3.left * mouseY);
+        if (Input.GetKeyDown(KeyCode.LeftShift))
+        {
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                Quaternion.Euler(0, 0, 0),
+                smoothSpeed * Time.deltaTime
+            );
+
+            isFlying = false;
+        }
+
+        OnSlope();
 
         //Movement
         if (!isFlying)
         {
+            transform.Rotate(0, mouseX * mouseSensitivity * Time.deltaTime, 0);
+            cameraT.position = transform.position + walkingCameraOffset;
+
+            // camera itself do the y
+            pitch -= mouseY * mouseSensitivity * Time.deltaTime;
+            pitch = Mathf.Clamp(pitch, -90f, 90f);
+            cameraT.rotation = Quaternion.Euler(
+                pitch,
+                transform.eulerAngles.y,
+                0
+            );
+
             rb.useGravity = true;
 
-            if (rb.linearVelocity.magnitude > maxSpeed)
-            {
-                rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
-            }
-
-
+            // limit walking speed (horizontal only though)
+            Vector3 velocity = rb.linearVelocity;
+            Vector3 horizontal = new Vector3(velocity.x, 0, velocity.z);
+            horizontal = Vector3.ClampMagnitude(horizontal, maxWalkingSpeed);
+            rb.linearVelocity = new Vector3(horizontal.x, velocity.y, horizontal.z);
 
             if (Input.GetKey(KeyCode.W))
-            {
-                rb.AddForce(GetSlopeMoveDirection(transform.forward) * moveSpeed);
-            }
+                rb.AddForce(GetSlopeMoveDirection(transform.forward) * walkSpeed);
             if (Input.GetKey(KeyCode.A))
-            {
-                rb.AddForce(GetSlopeMoveDirection(transform.right) * -moveSpeed);
-            }
-            if (Input.GetKey(KeyCode.S)) 
-            {
-                rb.AddForce(GetSlopeMoveDirection(transform.forward) * -moveSpeed);
-            }
+                rb.AddForce(GetSlopeMoveDirection(transform.right) * -walkSpeed);
+            if (Input.GetKey(KeyCode.S))
+                rb.AddForce(GetSlopeMoveDirection(transform.forward) * -walkSpeed);
             if (Input.GetKey(KeyCode.D))
+                rb.AddForce(GetSlopeMoveDirection(transform.right) * walkSpeed);
+        }
+        else // isFlying
+        {
+            if (OnGround()) // reset back to walking once touch ground when flying
             {
-                rb.AddForce(GetSlopeMoveDirection(transform.right) * moveSpeed);
+                isFlying = false;
+                rb.AddForce(Vector3.up * bounceForce);
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    Quaternion.Euler(0, 0, 0),
+                    smoothSpeed * Time.deltaTime
+                );
+
+                rb.useGravity = true;
+            }
+            else // gonna fly lesgo!!
+            {
+                cameraT.position = transform.position + flyingCameraOffset; // but lerp this later
+
+                transform.Rotate(
+                    -mouseY * mouseSensitivity * Time.deltaTime, 
+                    mouseX * mouseSensitivity * Time.deltaTime, 
+                    0
+                );
+
+                cameraT.rotation = transform.rotation;
+
+                rb.useGravity = false;
+
+                float input = 0f;
+
+                if (Input.GetKey(KeyCode.Space))
+                    input = 1f;
+
+                Vector3 move = transform.forward * input * flySpeed;
+
+                rb.linearVelocity = new Vector3(
+                    move.x,
+                    rb.linearVelocity.y,
+                    move.z
+                );
+
             }
         }
-        else
-        {
-            rb.useGravity = false;
-        }
-        
-
-
 
         //Laser
         if (Input.GetMouseButton(0)) // Hold left click
@@ -88,42 +149,45 @@ public class Player : MonoBehaviour
         }
         else
         {
-            lineRenderer.enabled = false;
+            laser.enabled = false;
         }
     }
 
     void FireLaser()
     {
-        lineRenderer.enabled = true;
+        laser.enabled = true;
 
-        Vector3 startPos = transform.position + offsetLaser;
+        Vector3 startPos = transform.position + laserOffset;
         Vector3 direction = transform.forward;
 
-        lineRenderer.SetPosition(0, startPos);
+        laser.SetPosition(0, startPos);
 
         RaycastHit hit;
 
-        if (Physics.Raycast(startPos, direction, out hit, maxDistance))
+        if (Physics.Raycast(startPos, direction, out hit, maxDistanceOfLaser))
         {
-            lineRenderer.SetPosition(1, hit.point);
-
-            Debug.Log("Hit: " + hit.collider.name);
-
-            // Example damage:
-            // hit.collider.GetComponent<Enemy>()?.TakeDamage(10);
+            laser.SetPosition(1, hit.point);
+            //Debug.Log("Hit: " + hit.collider.name);
+            // hit.collider to get collider, then can use GetComponent<>() to, well, get components
         }
         else
         {
-            lineRenderer.SetPosition(1, startPos + direction * maxDistance);
+            laser.SetPosition(1, startPos + direction * maxDistanceOfLaser);
         }
+    }
+
+    bool OnGround()
+    {
+        return Physics.Raycast(transform.position, Vector3.down, out groundHit, playerHeight * 0.5f + 0.3f);
     }
 
     // Im always going to be on a slope dumbass
     bool OnSlope()
     {
-        if (Physics.Raycast(transform.position, Vector3.down, out slopeHit, playerHeight * 0.5f + 0.3f)) {
-            float angle = Vector3.Angle(Vector3.up, slopeHit.normal);
-            return angle < maxSlopeAngle; // && angle != 0.0f;
+        if (OnGround()) {
+            //groundHit already contains slopeHit data, as you jsut called OnGround, which modifies it
+            float angle = Vector3.Angle(Vector3.up, groundHit.normal);
+            return angle < maxSlopeAngle && angle != 0.0f;
         }
 
         return false;
@@ -131,6 +195,6 @@ public class Player : MonoBehaviour
 
     Vector3 GetSlopeMoveDirection(Vector3 moveDirection)
     {
-        return Vector3.ProjectOnPlane(moveDirection, slopeHit.normal).normalized;
+        return Vector3.ProjectOnPlane(moveDirection, groundHit.normal).normalized;
     }
 }
