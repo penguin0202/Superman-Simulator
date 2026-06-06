@@ -77,7 +77,7 @@ public class FlyingPlayer : MonoBehaviour
         if (Input.GetKey(KeyCode.A)) rotate = 1f;
         if (Input.GetKey(KeyCode.D)) rotate = -1f;
 
-        transform.Rotate(0, 0, rotate * mouseSensitivity * Time.deltaTime);
+        transform.Rotate(0, 0, rotate * mouseSensitivity / 2 * Time.deltaTime);
     }
 
     void MovePlayer()
