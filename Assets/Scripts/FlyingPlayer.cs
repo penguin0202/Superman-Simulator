@@ -1,3 +1,4 @@
+using System.IO.MemoryMappedFiles;
 using UnityEngine;
 
 public class FlyingPlayer : MonoBehaviour
@@ -11,7 +12,8 @@ public class FlyingPlayer : MonoBehaviour
     public float bounceForce; // once on ground when flying, must bounce back a little to land
 
     [Header("Laser")]
-    public LineRenderer laser;
+    public LineRenderer rightLaser;
+    public LineRenderer leftLaser;
     public float maxDistanceOfLaser = 100f;
     public Vector3 laserOffset; // play around with this
 
@@ -22,6 +24,8 @@ public class FlyingPlayer : MonoBehaviour
 
     float playerHeight;
 
+    public Camera cameraObj;
+
     void Start()
     {
         rb = GetComponent<Rigidbody>();
@@ -29,39 +33,24 @@ public class FlyingPlayer : MonoBehaviour
 
         SphereCollider sphere = GetComponent<SphereCollider>();
         playerHeight = sphere.radius * transform.localScale.y;
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        rightLaser.positionCount = 2;
+        leftLaser.positionCount = 2;
     }
 
     void Update()
     {
-        float mouseX = Input.GetAxis("Mouse X");
-        float mouseY = Input.GetAxis("Mouse Y");
-        transform.Rotate(-mouseY * mouseSensitivity * Time.deltaTime, mouseX * mouseSensitivity * Time.deltaTime, 0);
+        RotateCamera();
+        MovePlayer();
 
-        /*if (Input.GetKey(KeyCode.W))
-            rb.AddForce(transform.forward * flySpeed);
-        if (Input.GetKey(KeyCode.A))
-            rb.AddForce(transform.right * flySpeed);
-        if (Input.GetKey(KeyCode.S))
-            rb.AddForce(transform.forward * -flySpeed);
-        if (Input.GetKey(KeyCode.D))
-            rb.AddForce(transform.right * -flySpeed);*/
         
-        float right = 0f;
 
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            if (flyForwardFloat == 0f) flyForwardFloat = 1f;
-            else flyForwardFloat = 0f;
-        }
-            
-        if (Input.GetKey(KeyCode.A))
-            right = -1f;
-        if (Input.GetKey(KeyCode.D))
-            right = 1f;
 
-        Vector3 move = transform.forward * flyForwardFloat + transform.right * right;
-        rb.linearVelocity = move.normalized * flySpeed;
-    
+
+
 
         //Laser
         if (Input.GetMouseButton(0)) // Hold left click
@@ -70,31 +59,66 @@ public class FlyingPlayer : MonoBehaviour
         }
         else
         {
-            laser.enabled = false;
+            rightLaser.enabled = false;
+            leftLaser.enabled = false;
         }
 
         if (OnGround()) rb.AddForce(Vector3.up * flySpeed);
     }
 
+    void RotateCamera()
+    {
+        float mouseX = Input.GetAxis("Mouse X");
+        float mouseY = Input.GetAxis("Mouse Y");
+        transform.Rotate(-mouseY * mouseSensitivity * Time.deltaTime, mouseX * mouseSensitivity * Time.deltaTime, 0);
+
+        float rotate = 0f;
+
+        if (Input.GetKey(KeyCode.A)) rotate = 1f;
+        if (Input.GetKey(KeyCode.D)) rotate = -1f;
+
+        transform.Rotate(0, 0, rotate * mouseSensitivity * Time.deltaTime);
+    }
+
+    void MovePlayer()
+    {
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            if (flyForwardFloat == 0f) flyForwardFloat = 1f;
+            else flyForwardFloat = 0f;
+        }
+
+        Vector3 move = transform.forward * flyForwardFloat;
+        rb.linearVelocity = move.normalized * flySpeed;
+    }
+
     void FireLaser()
     {
-        laser.enabled = true;
+        Ray ray = cameraObj.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
 
-        Vector3 startPos = transform.position + laserOffset;
-        Vector3 direction = transform.forward;
-
-        laser.SetPosition(0, startPos);
-
+        Vector3 endPoint;
         RaycastHit hit;
 
-        if (Physics.Raycast(startPos, direction, out hit, maxDistanceOfLaser))
+        if (Physics.Raycast(ray, out hit, maxDistanceOfLaser))
         {
-            laser.SetPosition(1, hit.point);
+            endPoint = hit.point;
             Debug.Log("Hit: " + hit.collider.name);
-            // hit.collider to get collider, then can use GetComponent<>() to, well, get components
         }
         else
-            laser.SetPosition(1, startPos + direction * maxDistanceOfLaser);
+            endPoint = ray.origin + ray.direction * maxDistanceOfLaser;
+        
+        // hit.collider to get collider, then can use GetComponent<>() to, well, get components
+
+        Vector3 rightStartPoint = cameraObj.transform.TransformPoint(laserOffset);
+        Vector3 leftStartPoint = cameraObj.transform.TransformPoint(new Vector3(-laserOffset.x, laserOffset.y, laserOffset.z));
+
+        rightLaser.SetPosition(0, rightStartPoint);
+        leftLaser.SetPosition(0, leftStartPoint);
+        rightLaser.SetPosition(1, endPoint);
+        leftLaser.SetPosition(1, endPoint);
+
+        rightLaser.enabled = true;
+        leftLaser.enabled = true;
     }
 
     bool OnGround()
