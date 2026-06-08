@@ -47,6 +47,8 @@ public class TerrainGenerator : MonoBehaviour
 
     float CalculateHeight(int x, int y)
     {
+        if (x == 0 || x == width || y == 0 || y == height) return 0.0f;
+
         float xCoord = (float)x / width * scale;
         float yCoord = (float)y / height * scale;
 
@@ -56,15 +58,15 @@ public class TerrainGenerator : MonoBehaviour
         }
         else if (value < 0.50f)
         {
-            return 1 - Mathf.PerlinNoise(xCoord, yCoord);
+            return Mathf.Abs(1 - Mathf.PerlinNoise(xCoord, yCoord));
         }
         else if (value < 0.75f)
         {
-            return Mathf.Abs(Mathf.PerlinNoise(xCoord, yCoord)) * Mathf.PerlinNoise(xCoord, yCoord);
+            return Mathf.PerlinNoise(xCoord, yCoord) * Mathf.PerlinNoise(xCoord, yCoord);
         }
         else
         {
-            return 1.5f * Mathf.Sqrt(Mathf.PerlinNoise(xCoord, yCoord));
+            return 1.5f * Mathf.Sqrt(Mathf.Abs(Mathf.PerlinNoise(xCoord, yCoord)));
         }
     }
 
