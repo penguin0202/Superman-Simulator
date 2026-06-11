@@ -102,7 +102,7 @@ public class FlyingPlayer : MonoBehaviour
         if (Input.GetKey(KeyCode.A)) rotate = 1f;
         if (Input.GetKey(KeyCode.D)) rotate = -1f;
 
-        transform.Rotate(0, 0, rotate * mouseSensitivity * 1.25f * Time.deltaTime);
+        transform.Rotate(0, 0, rotate * mouseSensitivity / 1.5f * Time.deltaTime);
     }
 
     void MovePlayer()
@@ -147,8 +147,8 @@ public class FlyingPlayer : MonoBehaviour
         if (Physics.Raycast(ray, out hit, maxDistanceOfLaser))
         {
             endPoint = hit.point;
-            Debug.Log("Hit: " + hit.collider.name);
-            if (hit.collider.transform.parent.CompareTag("Enemy"))
+            //Debug.Log("Hit: " + hit.collider.name);
+            if (hit.collider.transform.CompareTag("Enemy"))
                 hit.collider.transform.parent.GetComponent<TheEnemy>().Die();
         }
         else
